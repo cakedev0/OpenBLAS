@@ -2831,12 +2831,16 @@ void *blas_memory_alloc(int procpos){
      call. */
   do {
     RMB;
+#if defined(SMP) || defined(USE_LOCKING)
     if (!memory[position].used) {
       blas_lock((BLASULONG *)&memory[position].lock);
+#endif
       if (!memory[position].used) goto allocation;
 
+#if defined(SMP) || defined(USE_LOCKING)
       blas_unlock((BLASULONG *)&memory[position].lock);
     }
+#endif
     position ++;
 
   } while (position < NUM_BUFFERS);
@@ -2874,7 +2878,9 @@ void *blas_memory_alloc(int procpos){
 #endif
 
   memory[position].used = 1;
+#if defined(SMP) || defined(USE_LOCKING)
   blas_unlock((BLASULONG *)&memory[position].lock);
+#endif
   if (!memory[position].addr) {
     int failcount = 0;
     do {
@@ -2942,13 +2948,7 @@ void *blas_memory_alloc(int procpos){
 
     } while ((BLASLONG)map_address == -1);
 
-#if (defined(SMP) || defined(USE_LOCKING)) && !defined(USE_OPENMP)
-    LOCK_COMMAND(&alloc_lock);
-#endif
     memory[position].addr = map_address;
-#if (defined(SMP) || defined(USE_LOCKING)) && !defined(USE_OPENMP)
-    UNLOCK_COMMAND(&alloc_lock);
-#endif
 
 #ifdef DEBUG
     printf("  Mapping Succeeded. %p(%d)\n", (void *)memory[position].addr, position);
@@ -3123,8 +3123,8 @@ void blas_memory_free(void *free_area){
 #endif
 
   position = 0;
-  /* Only the owner of a slot of memory[] frees it, so it is released
-     without alloc_lock, as it is claimed in blas_memory_alloc. */
+  /* Only the thread holding a buffer of memory[] frees it, so its slot is
+     released without alloc_lock, as it is claimed in blas_memory_alloc. */
   while ((position < NUM_BUFFERS) && (memory[position].addr != free_area))
     position++;
 
