@@ -771,6 +771,12 @@ if (*(FLOAT*)args.alpha != 0.0) {
 #endif
 
   buffer = (XFLOAT *)blas_memory_alloc(0);
+  if (!buffer) {
+    info = -999;
+    BLASFUNC(xerbla)(ERROR_NAME, &info, sizeof(ERROR_NAME));
+    return;
+  }
+
 //For LOONGARCH64, applying an offset to the buffer is essential
 //for minimizing cache conflicts and optimizing performance.
 #if defined(ARCH_LOONGARCH64) && !defined(NO_AFFINITY)
