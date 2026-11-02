@@ -77,6 +77,10 @@
 #define GEMM_MULTITHREAD_THRESHOLD 4
 #endif
 
+/* Below this much work per thread, the threaded driver's synchronisation
+   costs more than the extra threads bring. */
+#define SYRK_MIN_WORK_PER_THREAD (8. * SMP_THRESHOLD_MIN * GEMM_MULTITHREAD_THRESHOLD)
+
 static int (*syrk[])(blas_arg_t *, BLASLONG *, BLASLONG *, FLOAT *, FLOAT *, BLASLONG) = {
 #ifndef HEMM
   SYRK_UN, SYRK_UC, SYRK_LN, SYRK_LC,
@@ -402,6 +406,8 @@ if (strcmp(gotoblas_corename(), "armv9sme") == 0
   args.nthreads = 1;
   } else {
   args.nthreads = num_cpu_avail(3);
+  if (NNK < args.nthreads * SYRK_MIN_WORK_PER_THREAD)
+    args.nthreads = MAX(1, (int)(NNK / SYRK_MIN_WORK_PER_THREAD));
   }
 
   if (args.nthreads == 1) {
