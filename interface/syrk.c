@@ -406,8 +406,14 @@ if (strcmp(gotoblas_corename(), "armv9sme") == 0
   args.nthreads = 1;
   } else {
   args.nthreads = num_cpu_avail(3);
-  if (NNK < args.nthreads * SYRK_MIN_WORK_PER_THREAD)
+  if (NNK < args.nthreads * SYRK_MIN_WORK_PER_THREAD) {
     args.nthreads = MAX(1, (int)(NNK / SYRK_MIN_WORK_PER_THREAD));
+#if !defined(DOUBLE) && !defined(XDOUBLE)
+    /* Single precision is about twice as fast on one thread, and a few
+       threads do not beat it on such small calls. */
+    if (args.nthreads < 8) args.nthreads = 1;
+#endif
+  }
   }
 
   if (args.nthreads == 1) {

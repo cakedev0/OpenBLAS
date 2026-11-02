@@ -538,7 +538,14 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, FLOAT *sa, FLO
   int switch_ratio = SWITCH_RATIO;
 #endif
 
-  if (args->n < nthreads * switch_ratio) nthreads = args->n / switch_ratio;
+  if (args->n < nthreads * switch_ratio) {
+    nthreads = args->n / switch_ratio;
+#if !defined(DOUBLE) && !defined(XDOUBLE)
+    /* In single precision fewer than 8 such threads are slower than one
+       (n = 64 or 96 on a Xeon 6787P). */
+    if (nthreads < 8) nthreads = 1;
+#endif
+  }
   if (nthreads <= 1) {
     SYRK_LOCAL(args, range_m, range_n, sa, sb, 0);
     return 0;
