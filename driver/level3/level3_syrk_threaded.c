@@ -533,7 +533,11 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, FLOAT *sa, FLO
   double dnum, di, dinum;
 
 #if defined(DYNAMIC_ARCH)
+#if defined(XDOUBLE) || defined(DOUBLE)
+  int switch_ratio = gotoblas->switch_ratio_d;
+#else
   int switch_ratio = gotoblas->switch_ratio;
+#endif
 #else
   int switch_ratio = SWITCH_RATIO;
 #endif

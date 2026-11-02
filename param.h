@@ -629,6 +629,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SYMV_P  8
 
+#define SWITCH_RATIO_DOUBLE            4
+#define GEMM_PREFERRED_SIZE_DOUBLE      4
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            4
 #define GEMM_PREFERRED_SIZE      4
@@ -1538,6 +1540,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SYMV_P  8
 
+#define SWITCH_RATIO_DOUBLE            4
+#define GEMM_PREFERRED_SIZE_DOUBLE      4
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            4
 #define GEMM_PREFERRED_SIZE      4
@@ -1664,6 +1668,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SYMV_P  8
 
+#define SWITCH_RATIO_DOUBLE           8
+#define GEMM_PREFERRED_SIZE_DOUBLE     8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO           8
 #define GEMM_PREFERRED_SIZE     8
@@ -1785,6 +1791,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SYMV_P  8
 
+#define SWITCH_RATIO_DOUBLE           8
+#define GEMM_PREFERRED_SIZE_DOUBLE     8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO           8
 #define GEMM_PREFERRED_SIZE     8
@@ -1918,6 +1926,8 @@ USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define SYMV_P  8
 
+#define SWITCH_RATIO_DOUBLE           8
+#define GEMM_PREFERRED_SIZE_DOUBLE     8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO           8
 #define GEMM_PREFERRED_SIZE     8
@@ -3654,6 +3664,7 @@ is a big desktop or server with abundant cache rather than a phone or embedded d
 #define ZGEMM_DEFAULT_UNROLL_M  4
 #define ZGEMM_DEFAULT_UNROLL_N  4
 
+#define SWITCH_RATIO_DOUBLE            8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            8
 #else
@@ -3793,6 +3804,7 @@ is a big desktop or server with abundant cache rather than a phone or embedded d
 
 #elif defined(NEOVERSEN1)
 
+#define SWITCH_RATIO_DOUBLE            8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            8
 #else
@@ -3830,6 +3842,8 @@ is a big desktop or server with abundant cache rather than a phone or embedded d
 
 #define GEMM_DIVIDE_LIMIT       3
 
+#define SWITCH_RATIO_DOUBLE            8
+#define GEMM_PREFERRED_SIZE_DOUBLE      4
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            8
 #define GEMM_PREFERRED_SIZE      4
@@ -3890,6 +3904,7 @@ is a big desktop or server with abundant cache rather than a phone or embedded d
 
 #elif defined(NEOVERSEN2) || defined(NEOVERSEV2)
 
+#define SWITCH_RATIO_DOUBLE            8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            8
 #else
@@ -3946,6 +3961,7 @@ is a big desktop or server with abundant cache rather than a phone or embedded d
 
 #elif defined(AMPERE1)
 
+#define SWITCH_RATIO_DOUBLE            8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            8
 #else
@@ -4030,6 +4046,7 @@ Until then, just keep it different than DGEMM_DEFAULT_UNROLL_N to keep copy rout
 
 #elif defined(ARMV8SVE) || defined(ARMV9SME) || defined(ARMV9) || defined(CORTEXA510)|| defined(CORTEXA710) || defined(CORTEXX2) // 128-bit SVE
 
+#define SWITCH_RATIO_DOUBLE            8
 #if defined(XDOUBLE) || defined(DOUBLE)
 #define SWITCH_RATIO            8
 #else
@@ -4503,6 +4520,17 @@ Until then, just keep it different than DGEMM_DEFAULT_UNROLL_N to keep copy rout
 
 #ifndef GEMM_PREFERRED_SIZE
 #define GEMM_PREFERRED_SIZE 1
+#endif
+
+/* DYNAMIC_ARCH builds read these from the gotoblas table, which is filled
+   in a file compiled without DOUBLE, so the double-precision values need
+   their own names. */
+#ifndef SWITCH_RATIO_DOUBLE
+#define SWITCH_RATIO_DOUBLE SWITCH_RATIO
+#endif
+
+#ifndef GEMM_PREFERRED_SIZE_DOUBLE
+#define GEMM_PREFERRED_SIZE_DOUBLE GEMM_PREFERRED_SIZE
 #endif
 
 #ifndef QGEMM_DEFAULT_UNROLL_M

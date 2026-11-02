@@ -47,9 +47,11 @@
 typedef struct {
   int dtb_entries;
   int switch_ratio;
+  int switch_ratio_d;
   int divide_rate;
   int divide_limit;
   int preferred_size;
+  int preferred_size_d;
   int offsetA, offsetB, align;
 #if BUILD_HFLOAT16 == 1
 int shgemm_p, shgemm_q, shgemm_r;

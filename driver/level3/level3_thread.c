@@ -49,7 +49,11 @@
 
 #ifdef DYNAMIC_ARCH
 #undef GEMM_PREFERRED_SIZE
+#if defined(XDOUBLE) || defined(DOUBLE)
+#define GEMM_PREFERRED_SIZE gotoblas->preferred_size_d
+#else
 #define GEMM_PREFERRED_SIZE gotoblas->preferred_size
+#endif
 #endif
 #ifndef GEMM_PREFERRED_SIZE
 #define GEMM_PREFERRED_SIZE 1
@@ -636,7 +640,11 @@ static int gemm_driver(blas_arg_t *args, BLASLONG *range_m, BLASLONG
   BLASLONG m, n, n_from, n_to;
   int mode;
 #if defined(DYNAMIC_ARCH)
+#if defined(XDOUBLE) || defined(DOUBLE)
+  int switch_ratio = gotoblas->switch_ratio_d;
+#else
   int switch_ratio = gotoblas->switch_ratio;
+#endif
 #else
   int switch_ratio = SWITCH_RATIO;
 #endif
@@ -816,7 +824,11 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, IFLOAT *sa, IF
   BLASLONG n = args -> n;
   BLASLONG nthreads_m, nthreads_n;
 #if defined(DYNAMIC_ARCH)
+#if defined(XDOUBLE) || defined(DOUBLE)
+  int switch_ratio = gotoblas->switch_ratio_d;
+#else
   int switch_ratio = gotoblas->switch_ratio;
+#endif
 #else
   int switch_ratio = SWITCH_RATIO;
 #endif
