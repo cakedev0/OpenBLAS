@@ -538,7 +538,8 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, FLOAT *sa, FLO
   int switch_ratio = SWITCH_RATIO;
 #endif
 
-  if ((nthreads == 1) || (args->n < nthreads * switch_ratio)) {
+  if (args->n < nthreads * switch_ratio) nthreads = args->n / switch_ratio;
+  if (nthreads <= 1) {
     SYRK_LOCAL(args, range_m, range_n, sa, sb, 0);
     return 0;
   }
