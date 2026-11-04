@@ -275,11 +275,13 @@ static BLASLONG splitk_nchunks(BLASLONG m, BLASLONG n, BLASLONG k, int nthreads)
   if (nthreads < 2 || m * n >= (BLASLONG)nthreads * 128 * 128) return 1;
   /* Keep chunks long enough to amortize packing. */
   if (k / p < 512) p = k / 512;
-  /* Cap the partial products at 64 MiB. */
-  BLASLONG cap = (64L << 20) / (m * n * (BLASLONG)sizeof(FLOAT));
+  /* Keep the partial products under 24 MiB: glibc maps larger blocks anew
+     on every call, and the page faults cost more than the split gains. */
+  BLASLONG cap = (24L << 20) / (m * n * (BLASLONG)sizeof(FLOAT));
   if (p - 1 > cap) p = cap + 1;
-  /* With fewer chunks than half the threads, the M x N split is faster. */
-  if (2 * p < nthreads) return 1;
+  /* With fewer chunks than threads, the M x N split is faster unless it
+     leaves each thread less than 64 x 64 of C. */
+  if (p < nthreads && (2 * p < nthreads || m * n >= (BLASLONG)nthreads * 64 * 64)) return 1;
   return p;
 }
 
