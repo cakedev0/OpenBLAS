@@ -273,15 +273,17 @@ struct splitk_job {
 static BLASLONG splitk_nchunks(BLASLONG m, BLASLONG n, BLASLONG k, int nthreads) {
   BLASLONG p = nthreads;
   if (nthreads < 2 || m * n >= (BLASLONG)nthreads * 128 * 128) return 1;
-  /* Keep chunks long enough to amortize packing. */
-  if (k / p < 512) p = k / 512;
+  /* Chunks of 512 amortize packing. When the M x N split would leave each
+     thread less than 64 x 64 of C, chunks of 256 still beat it, and one chunk
+     per thread keeps the load even on cores shared by two threads. */
+  int tiny = m * n < (BLASLONG)nthreads * 64 * 64;
+  if (k / p < (tiny ? 256 : 512)) p = k / 512;
   /* Keep the partial products under 24 MiB: glibc maps larger blocks anew
      on every call, and the page faults cost more than the split gains. */
   BLASLONG cap = (24L << 20) / (m * n * (BLASLONG)sizeof(FLOAT));
   if (p - 1 > cap) p = cap + 1;
-  /* With fewer chunks than threads, the M x N split is faster unless it
-     leaves each thread less than 64 x 64 of C. */
-  if (p < nthreads && (2 * p < nthreads || m * n >= (BLASLONG)nthreads * 64 * 64)) return 1;
+  /* With fewer chunks than threads, the M x N split is faster unless C is tiny. */
+  if (p < nthreads && (2 * p < nthreads || !tiny)) return 1;
   return p;
 }
 

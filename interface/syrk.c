@@ -107,10 +107,11 @@ struct syrk_splitk_job {
 static BLASLONG syrk_splitk_nchunks(BLASLONG n, BLASLONG k, int nthreads) {
   BLASLONG p = nthreads;
   if (nthreads < 2 || n * n >= (BLASLONG)nthreads * 128 * 128) return 1;
-  if (k / p < 512) p = k / 512;
+  int tiny = n * n < (BLASLONG)nthreads * 64 * 64;
+  if (k / p < (tiny ? 256 : 512)) p = k / 512;
   BLASLONG cap = (24L << 20) / (n * n * (BLASLONG)sizeof(FLOAT));
   if (p - 1 > cap) p = cap + 1;
-  if (p < nthreads && (2 * p < nthreads || n * n >= (BLASLONG)nthreads * 64 * 64)) return 1;
+  if (p < nthreads && (2 * p < nthreads || !tiny)) return 1;
   return p;
 }
 
