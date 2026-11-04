@@ -91,6 +91,128 @@ static int (*syrk[])(blas_arg_t *, BLASLONG *, BLASLONG *, FLOAT *, FLOAT *, BLA
 #endif
 };
 
+#if defined(SMP) && !defined(COMPLEX) && !defined(XDOUBLE) && !defined(USE_SIMPLE_THREADED_LEVEL3)
+#define SYRK_SPLITK 1
+#include <math.h>
+
+struct syrk_splitk_job {
+  blas_arg_t args;  /* first member: exec_blas passes &job as the args */
+  int (*fn)(blas_arg_t *, BLASLONG *, BLASLONG *, FLOAT *, FLOAT *, BLASLONG);
+  FLOAT *buf;
+  BLASLONG nbuf;
+  int uplo;
+};
+
+/* Same as the split-K gemm in gemm.c, for X.T @ X with few columns. */
+static BLASLONG syrk_splitk_nchunks(BLASLONG n, BLASLONG k, int nthreads) {
+  BLASLONG p = nthreads;
+  if (nthreads < 2 || n * n >= (BLASLONG)nthreads * 128 * 128) return 1;
+  if (k / p < 512) p = k / 512;
+  BLASLONG cap = (64L << 20) / (n * n * (BLASLONG)sizeof(FLOAT));
+  if (p - 1 > cap) p = cap + 1;
+  if (2 * p < nthreads) return 1;
+  return p;
+}
+
+static int syrk_splitk_worker(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n,
+                              FLOAT *sa, FLOAT *sb, BLASLONG mypos) {
+  struct syrk_splitk_job *job = (struct syrk_splitk_job *)args;
+  return job->fn(&job->args, NULL, NULL, sa, sb, 0);
+}
+
+static int syrk_splitk_reduce(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n,
+                              FLOAT *sa, FLOAT *sb, BLASLONG mypos) {
+  struct syrk_splitk_job *job = (struct syrk_splitk_job *)args;
+  BLASLONG n = job->args.n, ldc = job->args.ldc;
+  FLOAT *c = (FLOAT *)job->args.c;
+  for (BLASLONG j = range_n[0]; j < range_n[1]; j++) {
+    BLASLONG i0 = job->uplo ? j : 0, i1 = job->uplo ? n : j + 1;
+    FLOAT *cj = c + j * ldc;
+    for (BLASLONG p = 0; p < job->nbuf; p++) {
+      FLOAT *bj = job->buf + p * n * n + j * n;
+      for (BLASLONG i = i0; i < i1; i++) cj[i] += bj[i];
+    }
+  }
+  return 0;
+}
+
+static int syrk_splitk(blas_arg_t *args, int uplo, int trans, FLOAT *sa, FLOAT *sb) {
+  BLASLONG n = args->n, k = args->k;
+  if (((FLOAT *)args->alpha)[0] == ZERO) return 0;
+  BLASLONG p = syrk_splitk_nchunks(n, k, args->nthreads);
+  if (p < 2) return 0;
+  FLOAT *buf = (FLOAT *)malloc((size_t)(p - 1) * n * n * sizeof(FLOAT));
+  if (buf == NULL) return 0;
+  static FLOAT zero = ZERO;
+#ifdef DOUBLE
+  int mode = BLAS_DOUBLE | BLAS_REAL;
+#else
+  int mode = BLAS_SINGLE | BLAS_REAL;
+#endif
+  struct syrk_splitk_job jobs[MAX_CPU_NUMBER];
+  blas_queue_t queue[MAX_CPU_NUMBER];
+  BLASLONG range[MAX_CPU_NUMBER + 1];
+  BLASLONG i, k0 = 0;
+  for (i = 0; i < p; i++) {
+    BLASLONG kw = (k - k0) / (p - i);
+    jobs[i].args = *args;
+    jobs[i].args.k = kw;
+    jobs[i].args.nthreads = 1;
+    /* N: A is n x k, chunk = columns k0.. ; T: A is k x n, chunk = rows k0.. */
+    jobs[i].args.a = (FLOAT *)args->a + (trans ? k0 : k0 * args->lda);
+    if (i > 0) {
+      jobs[i].args.c = buf + (i - 1) * n * n;
+      jobs[i].args.ldc = n;
+      jobs[i].args.beta = &zero;
+    }
+    jobs[i].fn = syrk[(uplo << 1) | trans];
+    queue[i].mode = mode;
+    queue[i].routine = (void *)syrk_splitk_worker;
+    queue[i].args = (blas_arg_t *)&jobs[i];
+    queue[i].range_m = NULL;
+    queue[i].range_n = NULL;
+    queue[i].sa = NULL;
+    queue[i].sb = NULL;
+    queue[i].next = &queue[i + 1];
+    k0 += kw;
+  }
+  queue[0].sa = sa;
+  queue[0].sb = sb;
+  queue[p - 1].next = NULL;
+  exec_blas(p, queue);
+
+  /* Column ranges with equal triangle area: column j of the upper triangle
+     holds j + 1 entries, of the lower n - j. */
+  BLASLONG nr = MIN(p, n);
+  jobs[0].args = *args;
+  jobs[0].buf = buf;
+  jobs[0].nbuf = p - 1;
+  jobs[0].uplo = uplo;
+  range[0] = 0;
+  for (i = 1; i < nr; i++) {
+    double f = uplo ? 1.0 - sqrt(1.0 - (double)i / nr) : sqrt((double)i / nr);
+    range[i] = MAX(range[i - 1], MIN(n, (BLASLONG)(f * n)));
+  }
+  range[nr] = n;
+  for (i = 0; i < nr; i++) {
+    queue[i].mode = mode;
+    queue[i].routine = (void *)syrk_splitk_reduce;
+    queue[i].args = (blas_arg_t *)&jobs[0];
+    queue[i].range_m = NULL;
+    queue[i].range_n = &range[i];
+    queue[i].sa = NULL;
+    queue[i].sb = NULL;
+    queue[i].next = &queue[i + 1];
+  }
+  queue[0].sa = sa;
+  queue[0].sb = sb;
+  queue[nr - 1].next = NULL;
+  exec_blas(nr, queue);
+  free(buf);
+  return 1;
+}
+#endif
+
 OPENBLAS_EXPORT
 
 #ifndef CBLAS
@@ -404,6 +526,10 @@ if (strcmp(gotoblas_corename(), "armv9sme") == 0
   args.nthreads = num_cpu_avail(3);
   }
 
+#ifdef SYRK_SPLITK
+  if (args.nthreads > 1 && syrk_splitk(&args, uplo, trans, sa, sb)) {
+  } else
+#endif
   if (args.nthreads == 1) {
 #endif
 
