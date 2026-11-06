@@ -52,6 +52,13 @@
 #define DIVIDE_RATE 2
 #endif
 
+#define SYRK_MIN_WORK_PER_THREAD 3.5e6
+#if defined(DOUBLE) || defined(XDOUBLE)
+#define SYRK_MIN_REDUCED_THREADS 4
+#else
+#define SYRK_MIN_REDUCED_THREADS 8
+#endif
+
 //The array of job_t may overflow the stack.
 //Instead, use malloc to alloc job_t.
 #if MAX_CPU_NUMBER > BLAS3_MEM_ALLOC_THRESHOLD
@@ -530,6 +537,7 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, FLOAT *sa, FLO
   BLASLONG width, i, j, k;
   BLASLONG n, n_from, n_to;
   int  mode, mask;
+  int  locked = 0;
   double dnum, di, dinum;
 
 #if defined(DYNAMIC_ARCH)
@@ -538,7 +546,22 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, FLOAT *sa, FLO
   int switch_ratio = SWITCH_RATIO;
 #endif
 
-  if ((nthreads == 1) || (args->n < nthreads * switch_ratio)) {
+  /* Too few columns for every thread: use fewer threads rather than one,
+     but only when each still has enough work to beat a single thread. Few
+     threads are slower than one on small calls, more so in single precision
+     where one thread is about twice as fast. */
+  if (args->n < nthreads * switch_ratio) {
+    double work = (double)args->n * (double)args->n * (double)args->k;
+    nthreads = MIN(args->n / switch_ratio, (BLASLONG)(work / SYRK_MIN_WORK_PER_THREAD));
+    /* These calls gain little over one thread, so don't wait for another
+       caller to finish: several callers on one thread each are much faster
+       than the same callers taking turns. */
+    if (nthreads < SYRK_MIN_REDUCED_THREADS) nthreads = 1;
+    else if (blas_level3_thread_try_enter()) locked = 1;
+    else nthreads = 1;
+  }
+
+  if (nthreads <= 1) {
     SYRK_LOCAL(args, range_m, range_n, sa, sb, 0);
     return 0;
   }
@@ -567,7 +590,7 @@ int CNAME(blas_arg_t *args, BLASLONG *range_m, BLASLONG *range_n, FLOAT *sa, FLO
 #endif
 #endif
 
-  blas_level3_thread_enter();
+  if (!locked) blas_level3_thread_enter();
 
   newarg.m        = args -> m;
   newarg.n        = args -> n;
