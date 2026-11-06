@@ -255,6 +255,26 @@ static inline int get_gemm_optimal_nthreads(double MNK) {
 }
 #endif
 
+#if defined(SMP) && !defined(USE_SIMPLE_THREADED_LEVEL3) && !defined(COMPLEX) && !defined(BFLOAT16) && !defined(HFLOAT16) && !defined(BGEMM) && !defined(GEMM3M) && !defined(XDOUBLE)
+#define GEMM_SPLITK 1
+#include "splitk.h"
+
+static int gemm_splitk(blas_arg_t *args, int transa, int transb, IFLOAT *sa, IFLOAT *sb) {
+  BLASLONG i, p;
+  splitk_chunk_t *chunks;
+  if (((FLOAT *)args->alpha)[0] == ZERO) return 0;
+  p = splitk_nchunks(args->m * args->n, args->k, args->nthreads);
+  chunks = splitk_begin(args, gemm[(transb << 2) | transa], p);
+  if (chunks == NULL) return 0;
+  for (i = 0; i < p; i++) {
+    chunks[i].args.a = (IFLOAT *)args->a + (transa ? chunks[i].k0 : chunks[i].k0 * args->lda);
+    chunks[i].args.b = (IFLOAT *)args->b + (transb ? chunks[i].k0 * args->ldb : chunks[i].k0);
+  }
+  splitk_finish(args, chunks, p, SPLITK_FULL, sa, sb);
+  return 1;
+}
+#endif
+
 OPENBLAS_EXPORT
 
 #ifndef CBLAS
@@ -791,6 +811,10 @@ if (*(FLOAT*)args.alpha != 0.0) {
 
   args.common = NULL;
 
+#ifdef GEMM_SPLITK
+ if (args.nthreads > 1 && gemm_splitk(&args, transa, transb, sa, sb)) {
+ } else
+#endif
  if (args.nthreads == 1) {
 #endif
 
