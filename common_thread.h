@@ -246,6 +246,8 @@ int exec_blas(BLASLONG num_cpu, blas_param_t *param, void *buffer);
 #ifndef ASSEMBLER
 
 void blas_level3_thread_enter(void);
+/* Returns 1 with the lock held, as after blas_level3_thread_enter, else 0. */
+int blas_level3_thread_try_enter(void);
 void blas_level3_thread_leave(void);
 
 int blas_level1_thread(int mode, BLASLONG m, BLASLONG n, BLASLONG k, void *alpha,

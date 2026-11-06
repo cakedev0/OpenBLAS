@@ -19,6 +19,7 @@ else ()
     test_amin.c
     test_axpby.c
     test_gemv.c
+    test_splitk.c
     test_trmv.c
     test_gemm.c
     test_matrix_packing.c
