@@ -152,8 +152,14 @@ void NAME(blasint *N, blasint *NRHS, FLOAT *a, blasint *ldA, blasint *ipiv,
 #ifdef SMP
   } else {
 
+    /* Same cap as in getrf, for the factorization only: the solve splits over
+       the right-hand sides, so each gets its own thread, and caps itself when
+       there are few. */
+    int nthreads = args.nthreads;
+    if (args.nthreads > 3 * MAX(8, args.m / 200)) args.nthreads = MAX(8, args.m / 200);
     args.n    = *N;
     info = GETRF_PARALLEL(&args, NULL, NULL, sa, sb, 0);
+    args.nthreads = nthreads;
 
     if (info == 0 && *NRHS > 0){
       args.n    = *NRHS;
