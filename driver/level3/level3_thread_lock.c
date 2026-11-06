@@ -65,6 +65,22 @@ void blas_level3_thread_enter(void)
   omp_unset_lock(&critical_section_lock);
 }
 
+int blas_level3_thread_try_enter(void)
+{
+  blas_level3_thread_lock_init();
+
+  if (!omp_test_lock(&level3_lock)) return 0;
+  omp_set_lock(&critical_section_lock);
+
+  parallel_section_left--;
+
+  if (parallel_section_left != 0)
+    omp_unset_lock(&level3_lock);
+
+  omp_unset_lock(&critical_section_lock);
+  return 1;
+}
+
 void blas_level3_thread_leave(void)
 {
   omp_set_lock(&critical_section_lock);
@@ -102,6 +118,12 @@ void blas_level3_thread_enter(void)
   EnterCriticalSection((PCRITICAL_SECTION)&level3_lock);
 }
 
+int blas_level3_thread_try_enter(void)
+{
+  blas_level3_thread_lock_init();
+  return TryEnterCriticalSection((PCRITICAL_SECTION)&level3_lock) != 0;
+}
+
 void blas_level3_thread_leave(void)
 {
   LeaveCriticalSection((PCRITICAL_SECTION)&level3_lock);
@@ -114,6 +136,11 @@ static pthread_mutex_t level3_lock = PTHREAD_MUTEX_INITIALIZER;
 void blas_level3_thread_enter(void)
 {
   pthread_mutex_lock(&level3_lock);
+}
+
+int blas_level3_thread_try_enter(void)
+{
+  return pthread_mutex_trylock(&level3_lock) == 0;
 }
 
 void blas_level3_thread_leave(void)
