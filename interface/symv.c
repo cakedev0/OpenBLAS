@@ -187,10 +187,16 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_UPLO Uplo, blasint n, FLOAT alpha,
   }
 
 #ifdef SMP
+  /* The threads' partial results are summed serially, so beyond 4 threads
+     each needs at least 64 rows. Use all of them once that is half: on an
+     M2 (4 P + 4 E cores), 4 of 8 threads are slower than 8. */
   if (n <200)
 	  nthreads=1;
-  else
-  nthreads = num_cpu_avail(2);
+  else {
+	  int ncpu = num_cpu_avail(2);
+	  nthreads = MIN(ncpu, MAX(4, n / 64));
+	  if (2 * nthreads >= ncpu) nthreads = ncpu;
+  }
 
   if (nthreads == 1) {
 #endif
