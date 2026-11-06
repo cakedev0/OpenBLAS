@@ -37,6 +37,7 @@
 /*********************************************************************/
 
 #include <stdio.h>
+#include <math.h>
 #include "common.h"
 #ifdef FUNCTION_PROFILE
 #include "functable.h"
@@ -102,12 +103,19 @@ void NAME(blasint *M, blasint *N, FLOAT *a, blasint *ldA, blasint *ipiv, blasint
 #else 
   int nmax = 10000;
 #endif
+  int tmax;
   if (args.m*args.n <nmax) {
     args.nthreads = 1;
   } else {
     args.nthreads = num_cpu_avail(4);
     if ((args.m*args.n)/args.nthreads <nmax)
 	    args.nthreads = (args.m*args.n)/nmax;
+    /* The threads synchronize with each other after every panel, which costs
+       more than it brings beyond sqrt(m * n) / 200 threads. Only cap below a
+       third of the threads: on hybrid CPUs, a count just above the number of
+       P cores is slower than all of them. */
+    tmax = MAX(8, (int)(sqrt((double)args.m * args.n) / 200));
+    if (args.nthreads > 3 * tmax) args.nthreads = tmax;
   }
 
   if (args.nthreads == 1) {

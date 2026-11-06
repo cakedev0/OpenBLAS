@@ -171,10 +171,17 @@ FLOAT CNAME(BLASLONG n, FLOAT *x, BLASLONG inc_x, FLOAT *y, BLASLONG inc_y)
 	FLOAT dot = 0.0;
 
 #if defined(SMP)
+	// Waking each thread costs about as much as 25000 elements, so beyond
+	// 8 threads give each at least that. Once that is a third of the cores,
+	// use all of them as before: on Xeon 6, busying every core raises the
+	// uncore frequency (ELC), which pays for the extra threads.
 	if (inc_x == 0 || inc_y == 0 || n <= 10000)
 		nthreads = 1;
-	else
-		nthreads = num_cpu_avail(1);
+	else {
+		int ncpu = num_cpu_avail(1);
+		nthreads = MIN(ncpu, MAX(8, n / 25000));
+		if (3 * nthreads >= ncpu) nthreads = ncpu;
+	}
 
 	if (nthreads == 1) {
 		dot = dot_compute(n, x, inc_x, y, inc_y);

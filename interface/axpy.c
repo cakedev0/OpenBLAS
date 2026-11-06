@@ -95,10 +95,15 @@ void CNAME(blasint n, FLOAT alpha, FLOAT *x, blasint incx, FLOAT *y, blasint inc
   //
   //Temporarily work-around the low performance issue with small input size &
   //multithreads.
+  //Beyond 8 threads, each gets at least 200 kB of x, enough to pay for
+  //waking it, and all of them once that is a third of the cores (see ddot.c).
   if (incx == 0 || incy == 0 || n <= MULTI_THREAD_MINIMAL)
 	  nthreads = 1;
-  else
-	  nthreads = num_cpu_avail(1);
+  else {
+	  int ncpu = num_cpu_avail(1);
+	  nthreads = MIN(ncpu, MAX(8, (BLASLONG)n * SIZE / 200000));
+	  if (3 * nthreads >= ncpu) nthreads = ncpu;
+  }
 
   if (nthreads == 1) {
 #endif
