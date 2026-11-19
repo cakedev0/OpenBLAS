@@ -259,11 +259,11 @@ static inline int get_gemm_optimal_nthreads(double MNK) {
 #define GEMM_SPLITK 1
 #include "splitk.h"
 
-static int gemm_splitk(blas_arg_t *args, int transa, int transb, IFLOAT *sa, IFLOAT *sb) {
+static int gemm_splitk(blas_arg_t *args, int callers, int transa, int transb, IFLOAT *sa, IFLOAT *sb) {
   BLASLONG i, p;
   splitk_chunk_t *chunks;
   if (((FLOAT *)args->alpha)[0] == ZERO) return 0;
-  p = splitk_nchunks(args->m * args->n, args->k, args->nthreads);
+  p = splitk_nchunks(args->m * args->n, args->k, args->nthreads, callers);
   chunks = splitk_begin(args, gemm[(transb << 2) | transa], p);
   if (chunks == NULL) return 0;
   for (i = 0; i < p; i++) {
@@ -298,6 +298,9 @@ void NAME(char *TRANSA, char *TRANSB,
 
 #ifdef SMP
   double MNK;
+#ifdef GEMM_SPLITK
+  int counted = 0;
+#endif
 #if defined(USE_SIMPLE_THREADED_LEVEL3) || !defined(NO_AFFINITY)
 #ifndef COMPLEX
 #ifdef XDOUBLE
@@ -421,6 +424,9 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_TRANSPOSE TransA, enum CBLAS_TRANS
 
 #ifdef SMP
   double MNK;
+#ifdef GEMM_SPLITK
+  int counted = 0;
+#endif
 #if defined(USE_SIMPLE_THREADED_LEVEL3) || !defined(NO_AFFINITY)
 #ifndef COMPLEX
 #ifdef XDOUBLE
@@ -812,7 +818,8 @@ if (*(FLOAT*)args.alpha != 0.0) {
   args.common = NULL;
 
 #ifdef GEMM_SPLITK
- if (args.nthreads > 1 && gemm_splitk(&args, transa, transb, sa, sb)) {
+ counted = args.nthreads > 1;
+ if (counted && gemm_splitk(&args, blas_level3_callers_enter(), transa, transb, sa, sb)) {
  } else
 #endif
  if (args.nthreads == 1) {
@@ -856,6 +863,10 @@ if (*(FLOAT*)args.alpha != 0.0) {
 
 #ifdef SMP
   }
+#endif
+
+#ifdef GEMM_SPLITK
+ if (counted) blas_level3_callers_leave();
 #endif
 
  blas_memory_free(buffer);

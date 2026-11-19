@@ -249,6 +249,10 @@ void blas_level3_thread_enter(void);
 /* Returns 1 with the lock held, as after blas_level3_thread_enter, else 0. */
 int blas_level3_thread_try_enter(void);
 void blas_level3_thread_leave(void);
+/* Counts the calls running between enter and leave. enter returns the count,
+   this call included. */
+int blas_level3_callers_enter(void);
+void blas_level3_callers_leave(void);
 
 int blas_level1_thread(int mode, BLASLONG m, BLASLONG n, BLASLONG k, void *alpha,
 		       void *a, BLASLONG lda,

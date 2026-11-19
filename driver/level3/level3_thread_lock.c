@@ -149,3 +149,23 @@ void blas_level3_thread_leave(void)
 }
 
 #endif
+
+/* Calls between blas_level3_callers_enter and blas_level3_callers_leave. */
+static volatile BLASULONG callers_lock = 0;
+static volatile int callers = 0;
+
+int blas_level3_callers_enter(void)
+{
+  int n;
+  blas_lock(&callers_lock);
+  n = ++callers;
+  blas_unlock(&callers_lock);
+  return n;
+}
+
+void blas_level3_callers_leave(void)
+{
+  blas_lock(&callers_lock);
+  callers--;
+  blas_unlock(&callers_lock);
+}

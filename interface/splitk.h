@@ -26,9 +26,20 @@ typedef struct {
 
 enum { SPLITK_FULL, SPLITK_UPPER, SPLITK_LOWER };
 
-/* Number of k chunks, or 1 to keep the usual M x N split. */
-static BLASLONG splitk_nchunks(BLASLONG size_c, BLASLONG k, int nthreads) {
-  BLASLONG p = nthreads;
+/* Number of k chunks, or 1 to keep the usual M x N split. callers is the number
+   of gemm and syrk calls running now, this one included. */
+static BLASLONG splitk_nchunks(BLASLONG size_c, BLASLONG k, int nthreads, int callers) {
+  BLASLONG p;
+#ifdef USE_OPENMP
+  /* OpenMP builds run MAX_PARALLEL_NUMBER threaded calls at a time, so
+     concurrent callers are faster on the usual path than taking turns here. */
+  if (callers > 1) return 1;
+#else
+  /* Concurrent callers share the threads, and the split does not take the
+     level 3 lock: k chunks run on the single-threaded drivers. */
+  nthreads /= callers;
+#endif
+  p = nthreads;
   if (nthreads < 2 || size_c >= (BLASLONG)nthreads * 128 * 128) return 1;
   /* Chunks of 512 amortize packing. When the M x N split would leave each
      thread less than 64 x 64 of C, chunks of 256 still beat it, and one chunk
@@ -92,19 +103,24 @@ static void splitk_queue(splitk_chunk_t *chunks, BLASLONG p, BLASLONG count, voi
   exec_blas(count, queue);
 }
 
-/* Returns p chunks of k with the arguments common to gemm and syrk set and the
-   level 3 lock held, or NULL to use the usual path. Does not wait for the lock:
-   concurrent callers are faster on the usual path than taking turns here. */
+/* Returns p chunks of k with the arguments common to gemm and syrk set, or
+   NULL to use the usual path. OpenMP builds hold the level 3 lock until
+   splitk_finish, and don't wait for it. */
 static splitk_chunk_t *splitk_begin(blas_arg_t *args, splitk_driver_t driver, BLASLONG p) {
   static FLOAT zero = ZERO;
   BLASLONG i, k0 = 0, size_c = args->m * args->n;
   splitk_chunk_t *chunks;
   FLOAT *buf;
-  if (p < 2 || !blas_level3_thread_try_enter()) return NULL;
+  if (p < 2) return NULL;
+#ifdef USE_OPENMP
+  if (!blas_level3_thread_try_enter()) return NULL;
+#endif
   chunks = (splitk_chunk_t *)malloc(p * (sizeof(splitk_chunk_t) + sizeof(blas_queue_t)) +
                                     (p - 1) * size_c * sizeof(FLOAT));
   if (chunks == NULL) {
+#ifdef USE_OPENMP
     blas_level3_thread_leave();
+#endif
     return NULL;
   }
   buf = SPLITK_BUF(chunks, p);
@@ -151,7 +167,9 @@ static void splitk_finish(blas_arg_t *args, splitk_chunk_t *chunks, BLASLONG p, 
   }
   splitk_queue(chunks, p, nr, (void *)splitk_reduce, sa, sb);
   free(chunks);
+#ifdef USE_OPENMP
   blas_level3_thread_leave();
+#endif
 }
 
 #endif
