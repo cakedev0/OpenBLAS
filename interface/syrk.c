@@ -91,6 +91,26 @@ static int (*syrk[])(blas_arg_t *, BLASLONG *, BLASLONG *, FLOAT *, FLOAT *, BLA
 #endif
 };
 
+#if defined(SMP) && !defined(COMPLEX) && !defined(XDOUBLE) && !defined(USE_SIMPLE_THREADED_LEVEL3)
+#define SYRK_SPLITK 1
+#include "splitk.h"
+
+static int syrk_splitk(blas_arg_t *args, int callers, int uplo, int trans, FLOAT *sa, FLOAT *sb) {
+  BLASLONG i, p;
+  splitk_chunk_t *chunks;
+  if (((FLOAT *)args->alpha)[0] == ZERO) return 0;
+  args->m = args->n;
+  p = splitk_nchunks(args->n * args->n, args->k, args->nthreads, callers);
+  chunks = splitk_begin(args, syrk[(uplo << 1) | trans], p);
+  if (chunks == NULL) return 0;
+  /* N: A is n x k, a chunk is columns k0.. ; T: A is k x n, a chunk is rows k0.. */
+  for (i = 0; i < p; i++)
+    chunks[i].args.a = (FLOAT *)args->a + (trans ? chunks[i].k0 : chunks[i].k0 * args->lda);
+  splitk_finish(args, chunks, p, uplo ? SPLITK_LOWER : SPLITK_UPPER, sa, sb);
+  return 1;
+}
+#endif
+
 OPENBLAS_EXPORT
 
 #ifndef CBLAS
@@ -110,6 +130,9 @@ void NAME(char *UPLO, char *TRANS,
 
 #ifdef SMP
   double NNK;
+#ifdef SYRK_SPLITK
+  int counted = 0;
+#endif
 #ifdef USE_SIMPLE_THREADED_LEVEL3
 #ifndef COMPLEX
 #ifdef XDOUBLE
@@ -235,6 +258,9 @@ void CNAME(enum CBLAS_ORDER order, enum CBLAS_UPLO Uplo, enum CBLAS_TRANSPOSE Tr
 
 #ifdef SMP
 double NNK;
+#ifdef SYRK_SPLITK
+  int counted = 0;
+#endif
 
 #ifdef USE_SIMPLE_THREADED_LEVEL3
 #ifndef COMPLEX
@@ -404,6 +430,11 @@ if (strcmp(gotoblas_corename(), "armv9sme") == 0
   args.nthreads = num_cpu_avail(3);
   }
 
+#ifdef SYRK_SPLITK
+  counted = args.nthreads > 1;
+  if (counted && syrk_splitk(&args, blas_level3_callers_enter(), uplo, trans, sa, sb)) {
+  } else
+#endif
   if (args.nthreads == 1) {
 #endif
 
@@ -423,6 +454,10 @@ if (strcmp(gotoblas_corename(), "armv9sme") == 0
 #endif
 
   }
+#endif
+
+#ifdef SYRK_SPLITK
+  if (counted) blas_level3_callers_leave();
 #endif
 
  blas_memory_free(buffer);
